@@ -1,0 +1,1 @@
+gcc GPU_Locks.c -o GPU_Locks -lpthread -lrt
