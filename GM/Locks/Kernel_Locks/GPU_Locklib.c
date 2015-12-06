@@ -64,65 +64,65 @@ static void do_syscall(char* name);
 
 void GPU_LockInit(void)
 {
-    char the_file[256];
+  char the_file[256];
 
-    if (Initialized != 0) { // It is an error to call this more than once in a process
-      fprintf(stderr, "GPU_LockInit: Initialization Re-entered\n");
-      exit(-1);
-    }
+  if (Initialized != 0) { // It is an error to call this more than once in a process
+    fprintf(stderr, "GPU_LockInit: Initialization Re-entered\n");
+    exit(-1);
+  }
 
-    the_file[0] = '\0';
-    strcat(the_file, syscall_location);
-    strcat(the_file, dir_name);
-    strcat(the_file, "/");
-    strcat(the_file, file_name);
+  the_file[0] = '\0';
+  strcat(the_file, syscall_location);
+  strcat(the_file, dir_name);
+  strcat(the_file, "/");
+  strcat(the_file, file_name);
 
-    if ((fp = open(the_file, O_RDWR)) == -1) {
-        fprintf(stderr, "error opening %s\n", the_file);
-        exit(-1);
-    }
-    Initialized = 1;  // mark to detect multiple calls
-    printf("GPU - CUDA calls Intercepted\n");
-    return;
+  if ((fp = open(the_file, O_RDWR)) == -1) {
+    fprintf(stderr, "error opening %s\n", the_file);
+    exit(-1);
+  }
+  Initialized = 1;  // mark to detect multiple calls
+  fprintf(stderr, "GPU - CUDA calls Intercepted\n");
+  return;
 }
 
 void GPU_UnLock(void)
 {
-    do_syscall("GPU_UnLock");
+  do_syscall("GPU_UnLock");
 }
 
 void EE_Lock(void)
 {
-    do_syscall("EE_Lock");
+  do_syscall("EE_Lock");
 }
 
 void EE_UnLock(void)
 {
-    do_syscall("EE_UnLock");
+  do_syscall("EE_UnLock");
 }
 
 void CE_Lock(void)
 {
-    do_syscall("CE_Lock");
+  do_syscall("CE_Lock");
 }
 
 void CE_UnLock(void)
 {
-    do_syscall("CE_UnLock");
+  do_syscall("CE_UnLock");
 }
 
 static void do_syscall(char* name)
 {
-    int rc;
-    char call_buf[MAX_CALL];
+  int rc;
+  char call_buf[MAX_CALL];
 
-    strcpy(call_buf, name);
+  strcpy(call_buf, name);
 
-    rc = write(fp, call_buf, strlen(call_buf) + 1);
-    if (rc < 0) {
-        fprintf(stderr, "GPU Sync Call %s Failed: %i\n", name, rc);
-        fflush(stderr);
-        exit(-1);
-    }
-    return;
+  rc = write(fp, call_buf, strlen(call_buf) + 1);
+  if (rc < 0) {
+    fprintf(stderr, "GPU Sync Call %s Failed: %i\n", name, rc);
+    fflush(stderr);
+    exit(-1);
+  }
+  return;
 }

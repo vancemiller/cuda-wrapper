@@ -63,7 +63,7 @@
 
 int iDivUp(int a, int b)
 {
-  return ((a % b) != 0) ? (a / b + 1) : (a / b);
+    return ((a % b) != 0) ? (a / b + 1) : (a / b);
 }
 
 
@@ -74,136 +74,138 @@ void runTest(int argc, char **argv);
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-int main(int argc, char **argv)
+int
+main(int argc, char **argv)
 {
-  runTest(argc, argv);
+    runTest(argc, argv);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 //! CUDA Sample for calculating depth maps
 ////////////////////////////////////////////////////////////////////////////////
-void runTest(int argc, char **argv)
+void
+runTest(int argc, char **argv)
 {
-  cudaDeviceProp deviceProp;
-  deviceProp.major = 0;
-  deviceProp.minor = 0;
-  int i;
-  int count = 0;
+    cudaDeviceProp deviceProp;
+    deviceProp.major = 0;
+    deviceProp.minor = 0;
+    int i;
+    int count = 0;
 
-  int sync_level = 2; //default -- process blocking
+    int sync_level = 2; //default -- process blocking
 
-  pid_t my_pid;
-  time_t start_time, now, elapsed;
+    pid_t my_pid;
+    time_t start_time, now, elapsed;
 
-  my_pid = getpid();
+    my_pid = getpid();
 
-  /*
-   * The only parameter is an integer that indicates the desired level of
-   * synchronization used by the GPU driver (values defined below).  The
-   * specified level is used in cudaSetDeviceFlags() to set the level
-   * prior to initialization.
-   */
-  if (argc == 2)
-    sync_level = atoi(argv[1]);
-  // level 0 - spin polling (busy waiting) for GPU to finish
-  // level 1 - yield each time through the polling loop to let another thread run
-  // level 2 - block process waiting for GPU to finish
-  switch (sync_level)
-  {
-    case 0:
-      cudaSetDeviceFlags(cudaDeviceScheduleSpin);
-      printf("PID %d started > Synch Level is Spin\n", my_pid);
-      break;
-    case 1:
-      cudaSetDeviceFlags(cudaDeviceScheduleYield);
-      printf("PID %d started > Synch Level is Yield\n", my_pid);
-      break;
-    default:
-      cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
-      printf("PID %d started > Synch Level is Block\n", my_pid);
-  }
+    /*
+     * The only parameter is an integer that indicates the desired level of
+     * synchronization used by the GPU driver (values defined below).  The
+     * specified level is used in cudaSetDeviceFlags() to set the level
+     * prior to initialization.
+     */
+    if (argc == 2)
+       sync_level = atoi(argv[1]);
+            // level 0 - spin polling (busy waiting) for GPU to finish
+            // level 1 - yield each time through the polling loop to let another thread run
+            // level 2 - block process waiting for GPU to finish
+    switch (sync_level)
+      {
+       case 0:
+          cudaSetDeviceFlags(cudaDeviceScheduleSpin);
+          printf("PID %d started > Synch Level is Spin\n", my_pid);
+          break;
+       case 1:
+          cudaSetDeviceFlags(cudaDeviceScheduleYield);
+          printf("PID %d started > Synch Level is Yield\n", my_pid);
+          break;
+       default:
+          cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+          printf("PID %d started > Synch Level is Block\n", my_pid);
+      }
 
-  // follow convention and initialize CUDA/GPU
-  // used here to invoke initialization of GPU locking
-  cudaFree(0);
+    // follow convention and initialize CUDA/GPU
+    // used here to invoke initialization of GPU locking
+    cudaFree(0);
 
-  // use device 0, the only one on a TK1
-  cudaSetDevice(0);
+    // use device 0, the only one on a TK1
+    cudaSetDevice(0);
+  
+    checkCudaErrors(cudaGetDeviceProperties(&deviceProp, 0));
 
-  checkCudaErrors(cudaGetDeviceProperties(&deviceProp, 0));
+    // Search paramters
+    int minDisp = -16;
+    int maxDisp = 0;
 
-  // Search paramters
-  int minDisp = -16;
-  int maxDisp = 0;
+    // Load image data
+    // functions allocate memory for the images on host side
+    // initialize pointers to NULL to request lib call to allocate as needed
+    // PPM images are loaded into 4 byte/pixel memory (RGBX)
+    unsigned char *h_img0 = NULL;
+    unsigned char *h_img1 = NULL;
+    unsigned int w, h;
+    char *fname0 = sdkFindFilePath("stereo.im0.640x533.ppm", argv[0]);
+    char *fname1 = sdkFindFilePath("stereo.im1.640x533.ppm", argv[0]);
 
-  // Load image data
-  // functions allocate memory for the images on host side
-  // initialize pointers to NULL to request lib call to allocate as needed
-  // PPM images are loaded into 4 byte/pixel memory (RGBX)
-  unsigned char *h_img0 = NULL;
-  unsigned char *h_img1 = NULL;
-  unsigned int w, h;
-  char *fname0 = sdkFindFilePath("stereo.im0.640x533.ppm", argv[0]);
-  char *fname1 = sdkFindFilePath("stereo.im1.640x533.ppm", argv[0]);
+    if (!sdkLoadPPM4ub(fname0, &h_img0, &w, &h))
+    {
+        fprintf(stderr, "PID %d Failed to load <%s>\n", my_pid, fname0);
+        exit(-1);
+    }
 
-  if (!sdkLoadPPM4ub(fname0, &h_img0, &w, &h))
-  {
-    fprintf(stderr, "PID %d Failed to load <%s>\n", my_pid, fname0);
-    exit(-1);
-  }
+    if (!sdkLoadPPM4ub(fname1, &h_img1, &w, &h))
+    {
+        fprintf(stderr, "PID %d Failed to load <%s>\n", my_pid, fname1);
+        exit(-1);
+    }
 
-  if (!sdkLoadPPM4ub(fname1, &h_img1, &w, &h))
-  {
-    fprintf(stderr, "PID %d Failed to load <%s>\n", my_pid, fname1);
-    exit(-1);
-  }
+    // set up parameters used in rest of program
+    dim3 numThreads = dim3(blockSize_x, blockSize_y, 1);
+    dim3 numBlocks = dim3(iDivUp(w, numThreads.x), iDivUp(h, numThreads.y));
+    unsigned int numData = w*h;
+    unsigned int memSize = sizeof(int) * numData;
 
-  // set up parameters used in rest of program
-  dim3 numThreads = dim3(blockSize_x, blockSize_y, 1);
-  dim3 numBlocks = dim3(iDivUp(w, numThreads.x), iDivUp(h, numThreads.y));
-  unsigned int numData = w*h;
-  unsigned int memSize = sizeof(int) * numData;
+    //allocate memory for the result on host side
+    unsigned int *h_odata = (unsigned int *)malloc(memSize);
 
-  //allocate memory for the result on host side
-  unsigned int *h_odata = (unsigned int *)malloc(memSize);
+    // allocate device memory for inputs and the result
+    unsigned int *d_odata, *d_img0, *d_img1;
+    checkCudaErrors(cudaMalloc((void **) &d_odata, memSize));
+    checkCudaErrors(cudaMalloc((void **) &d_img0, memSize));
+    checkCudaErrors(cudaMalloc((void **) &d_img1, memSize));
 
-  // allocate device memory for inputs and the result
-  unsigned int *d_odata, *d_img0, *d_img1;
-  checkCudaErrors(cudaMalloc((void **) &d_odata, memSize));
-  checkCudaErrors(cudaMalloc((void **) &d_img0, memSize));
-  checkCudaErrors(cudaMalloc((void **) &d_img1, memSize));
+    // more setup for using the GPU
+    size_t offset = 0;
+    cudaChannelFormatDesc ca_desc0 = cudaCreateChannelDesc<unsigned int>();
+    cudaChannelFormatDesc ca_desc1 = cudaCreateChannelDesc<unsigned int>();
 
-  // more setup for using the GPU
-  size_t offset = 0;
-  cudaChannelFormatDesc ca_desc0 = cudaCreateChannelDesc<unsigned int>();
-  cudaChannelFormatDesc ca_desc1 = cudaCreateChannelDesc<unsigned int>();
+    tex2Dleft.addressMode[0] = cudaAddressModeClamp;
+    tex2Dleft.addressMode[1] = cudaAddressModeClamp;
+    tex2Dleft.filterMode     = cudaFilterModePoint;
+    tex2Dleft.normalized     = false;
+    tex2Dright.addressMode[0] = cudaAddressModeClamp;
+    tex2Dright.addressMode[1] = cudaAddressModeClamp;
+    tex2Dright.filterMode     = cudaFilterModePoint;
+    tex2Dright.normalized     = false;
+    checkCudaErrors(cudaBindTexture2D(&offset, tex2Dleft,  d_img0, ca_desc0, w, h, w*4));
+    assert(offset == 0);
 
-  tex2Dleft.addressMode[0] = cudaAddressModeClamp;
-  tex2Dleft.addressMode[1] = cudaAddressModeClamp;
-  tex2Dleft.filterMode     = cudaFilterModePoint;
-  tex2Dleft.normalized     = false;
-  tex2Dright.addressMode[0] = cudaAddressModeClamp;
-  tex2Dright.addressMode[1] = cudaAddressModeClamp;
-  tex2Dright.filterMode     = cudaFilterModePoint;
-  tex2Dright.normalized     = false;
-  checkCudaErrors(cudaBindTexture2D(&offset, tex2Dleft,  d_img0, ca_desc0, w, h, w*4));
-  assert(offset == 0);
-
-  checkCudaErrors(cudaBindTexture2D(&offset, tex2Dright, d_img1, ca_desc1, w, h, w*4));
-  assert(offset == 0);
-  // all setup and initialization complete, start iterations
+    checkCudaErrors(cudaBindTexture2D(&offset, tex2Dright, d_img1, ca_desc1, w, h, w*4));
+    assert(offset == 0);
+    // all setup and initialization complete, start iterations
 
 
-  printf("PID %d Iterating stereoDisparity CUDA Kernel for %d seconds, %d max loops\n", my_pid, TIME_LENGTH, MAX_LOOPS);
-  now = start_time = time(NULL);
+    printf("PID %d Iterating stereoDisparity CUDA Kernel for %d seconds, %d max loops\n", my_pid, TIME_LENGTH, MAX_LOOPS);
+    now = start_time = time(NULL);
 
-  for (i = 0; 
-      ((now - TIME_LENGTH) < start_time) &&
-      i < MAX_LOOPS; i++) {
+ for (i = 0; 
+            ((now - TIME_LENGTH) < start_time) &&
+              i < MAX_LOOPS; i++) {
 
     //initalize the memory for output data to zeros
     for (unsigned int i = 0; i < numData; i++)
-      h_odata[i] = 0;
+        h_odata[i] = 0;
 
     // copy host memory with images to device
     // copy host memory that was set to zero to initialize device output
@@ -240,66 +242,66 @@ void runTest(int argc, char **argv)
 
     now = time(NULL);
 
-  } // ends for loop
-  elapsed = now - start_time;
-  count = i;
+} // ends for loop
+    elapsed = now - start_time;
+    count = i;
 
-  // calculate checksum of resultant GPU image
-  // This verification is applied only to the 
-  // last result computed
-  unsigned int checkSum = 0;
+    // calculate checksum of resultant GPU image
+    // This verification is applied only to the 
+    // last result computed
+    unsigned int checkSum = 0;
 
-  for (unsigned int i=0 ; i<w *h ; i++)
-  {
-    checkSum += h_odata[i];
-  }
+    for (unsigned int i=0 ; i<w *h ; i++)
+    {
+        checkSum += h_odata[i];
+    }
 
-  if (checkSum == 4293895789) //valid checksum only for these two images
-    printf("PID %d Test PASSED\n", my_pid);
-  else {
-    fprintf(stderr, "PID %d verification failed, GPU Checksum = %u, ", my_pid, checkSum);
-    exit(-1);
-  }
+    if (checkSum == 4293895789) //valid checksum only for these two images
+       printf("PID %d Test PASSED\n", my_pid);
+    else {
+       fprintf(stderr, "PID %d verification failed, GPU Checksum = %u, ", my_pid, checkSum);
+       exit(-1);
+    }
 
-  printf("PID %d completed %d, duration %ld seconds\n", my_pid, count, elapsed);
+    printf("PID %d completed %d, duration %ld seconds\n", my_pid, count, elapsed);
 
 #ifdef WRITE_DISPARITY
-  // write out the resulting disparity image.
-  // creates file in directory containing executable
-  unsigned char *dispOut = (unsigned char *)malloc(numData);
-  int mult = 20;
+    // write out the resulting disparity image.
+    // creates file in directory containing executable
+    unsigned char *dispOut = (unsigned char *)malloc(numData);
+    int mult = 20;
 
-  char fnameOut[50] = "";
-  sprintf(fnameOut,"PID_%d_", my_pid);
-  strcat(fnameOut, "output_GPU.pgm");
+    char fnameOut[50] = "";
+    sprintf(fnameOut,"PID_%d_", my_pid);
+    strcat(fnameOut, "output_GPU.pgm");
 
-  for (unsigned int i=0; i<numData; i++)
-  {
-    dispOut[i] = (int)h_odata[i]*mult;
-  }
+    for (unsigned int i=0; i<numData; i++)
+    {
+        dispOut[i] = (int)h_odata[i]*mult;
+    }
 
-  printf("GPU image: <%s>\n", fnameOut);
-  sdkSavePGM(fnameOut, dispOut, w, h);
-  if (dispOut != NULL) free(dispOut);
+    printf("GPU image: <%s>\n", fnameOut);
+    sdkSavePGM(fnameOut, dispOut, w, h);
+    if (dispOut != NULL) free(dispOut);
 
 #endif
 
-  // cleanup device memory
-  checkCudaErrors(cudaFree(d_odata));
-  checkCudaErrors(cudaFree(d_img0));
-  checkCudaErrors(cudaFree(d_img1));
+    // cleanup device memory
+    checkCudaErrors(cudaFree(d_odata));
+    checkCudaErrors(cudaFree(d_img0));
+    checkCudaErrors(cudaFree(d_img1));
 
-  // cleanup host memory
-  if (h_odata != NULL) free(h_odata);
+    // cleanup host memory
+    if (h_odata != NULL) free(h_odata);
 
-  if (h_img0 != NULL) free(h_img0);
+    if (h_img0 != NULL) free(h_img0);
 
-  if (h_img1 != NULL) free(h_img1);
+    if (h_img1 != NULL) free(h_img1);
 
-  // cudaDeviceReset causes the driver to clean up all state. While
-  // not mandatory in normal operation, it is good practice.  It is also
-  // needed to ensure correct operation when the application is being
-  // profiled. Calling cudaDeviceReset causes all profile data to be
-  // flushed before the application exits
-  cudaDeviceReset();
+    // cudaDeviceReset causes the driver to clean up all state. While
+    // not mandatory in normal operation, it is good practice.  It is also
+    // needed to ensure correct operation when the application is being
+    // profiled. Calling cudaDeviceReset causes all profile data to be
+    // flushed before the application exits
+    cudaDeviceReset();
 }

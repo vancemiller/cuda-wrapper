@@ -1,9 +1,0 @@
-Sample bash scripts for running the vectorAdd benchmark with no
-GPU locking.  The naming conventon is run_X_S.sh where X is the 
-number of processes to run concurrently and S indicates the Linux 
-scheduling class to be used for the process(es) -- SO is SCHED_OTHER 
-with the default nice value, SF is SCHED_FIFO with equal priorities, 
-and SFP is SCHED_FIFO with successively higher priority assigned to 
-each process run by the script.  The Linux command chrt is used to
-set the scheduling class and priorities for SCHED_FIFO.  The process(es) 
-run in background and redirect stderr to a file named log.

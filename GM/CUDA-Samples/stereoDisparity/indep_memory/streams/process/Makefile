@@ -86,9 +86,10 @@ CCFLAGS     :=
 LDFLAGS     :=
 
 # Extra user flags
+DEFINES := -DPRINT_ITERATIONS -DPRINT_DETAILS
 EXTRA_NVCCFLAGS   ?=
 EXTRA_LDFLAGS     ?=
-EXTRA_CCFLAGS     ?=
+EXTRA_CCFLAGS     ?= $(DEFINES)
 
 # OS-specific build flags
 ifneq ($(DARWIN),)
@@ -144,7 +145,7 @@ ALL_LDFLAGS += $(addprefix -Xlinker ,$(LDFLAGS))
 ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
 
 # Common includes and paths for CUDA
-INCLUDES  := -I../../../../common/inc
+INCLUDES  := -I/home/ubuntu/NVIDIA_CUDA-6.5_Samples/common/inc
 LIBRARIES :=
 
 ################################################################################

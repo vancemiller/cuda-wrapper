@@ -95,15 +95,15 @@ main(int argc, char *argv[])
       {
        case 0:
           cudaSetDeviceFlags(cudaDeviceScheduleSpin);
-          printf("PID %d started > Synch Level is Spin\n", my_pid);
+          fprintf(stderr, "PID %d started > Synch Level is Spin\n", my_pid);
           break;
        case 1:
           cudaSetDeviceFlags(cudaDeviceScheduleYield);
-          printf("PID %d started > Synch Level is Yield\n", my_pid);
+          fprintf(stderr, "PID %d started > Synch Level is Yield\n", my_pid);
           break;
        default:
           cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
-          printf("PID %d started > Synch Level is Block\n", my_pid);
+          fprintf(stderr, "PID %d started > Synch Level is Block\n", my_pid);
       }
 
 #ifdef SET_PRIORITY
@@ -123,18 +123,18 @@ main(int argc, char *argv[])
           my_prio = 0;
     }
     if (my_prio == 0) {
-       printf("PID %d running SCHED_OTHER\n", my_pid);
+       fprintf(stderr, "PID %d running SCHED_OTHER\n", my_pid);
        my_param.sched_priority = 0;
        rc = sched_setscheduler(0, SCHED_OTHER, &my_param);
     }
     else {
-       printf("PID %d running SCHED_FIFO priority %d\n",
+       fprintf(stderr, "PID %d running SCHED_FIFO priority %d\n",
                my_pid, my_prio);
        my_param.sched_priority = my_prio;
        rc = sched_setscheduler(0, SCHED_FIFO, &my_param);
     }
     if (rc != 0) {
-       printf("PID %d Set Scheduler FAILED, running default, error %d\n", my_pid, errno);
+       fprintf(stderr, "PID %d Set Scheduler FAILED, running default, error %d\n", my_pid, errno);
     }
 #endif
 
@@ -224,7 +224,7 @@ main(int argc, char *argv[])
     }
 #endif
 
-     printf("PID %d Iterating Vector Add CUDA Kernel for %d seconds, %d max loops\n", my_pid, TIME_LENGTH, MAX_LOOPS);
+     fprintf(stderr, "PID %d Iterating Vector Add CUDA Kernel for %d seconds, %d max loops\n", my_pid, TIME_LENGTH, MAX_LOOPS);
      now = start_time = time(NULL);
 
  for (i = 0; 
@@ -302,8 +302,9 @@ main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
     }
-    printf("PID %d Test PASSED\n", my_pid);
-    printf("PID %d completed %d, duration %ld seconds\n", my_pid, count, elapsed);
+    fprintf(stderr, "PID %d Test PASSED\n", my_pid);
+    fprintf(stderr, "PID %d completed %d, duration %ld seconds\n", my_pid, count, elapsed);
+    fprintf(stdout, "%d,", count);
 
     // Free device global memory for inputs A and B and result C
     err = cudaFree(d_A);
