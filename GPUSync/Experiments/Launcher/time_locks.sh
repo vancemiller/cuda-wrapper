@@ -7,8 +7,8 @@ STOP=100
 R="timing_results_" # Output folder prefix
 
 # Test programs
-VECTOR_ADD="/home/ubuntu/GM/CUDA-Samples/vectorAdd/indep_memory/streams_pinned/process/vectorAdd"
-STEREO_DISPARITY="/home/ubuntu/GM/CUDA-Samples/stereoDisparity/indep_memory/streams/process/stereoDisparity"
+VECTOR_ADD="/home/ubuntu/GPUSync/CUDA-Samples/vectorAdd/indep_memory/streams_pinned/process/vectorAdd"
+STEREO_DISPARITY="/home/ubuntu/GPUSync/CUDA-Samples/stereoDisparity/indep_memory/streams/process/stereoDisparity"
 
 E=$STEREO_DISPARITY # Executable
 
@@ -21,7 +21,7 @@ make > /dev/null
 cd ${TEST_DIR}
 
 # Locking code
-KERNEL_LOCKS="/home/ubuntu/GM/Locks/Kernel_Locks"
+KERNEL_LOCKS="/home/ubuntu/GPUSync/Locks/Kernel_Locks"
 LOCK_DIR=$KERNEL_LOCKS
 cd $LOCK_DIR
 make > /dev/null

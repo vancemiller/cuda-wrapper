@@ -1,11 +1,11 @@
 #!/bin/bash
+echo "Concurrent process timing. (Edit this file to change configuration.)"
 
 ############## Configuration #############
 
 S=".csv"; # Filename suffix
-I=5 # Number of processes
-START=17
-STOP=100
+I=5 # Number of concurrent processes
+ITERATION_COUNT=100 # Number of times to run this experiment
 R="sd1_results" # Output folder prefix
 L="KERNEL" # Specify "KERNEL" for kernel locks and "POSIX" for posix locks
 
@@ -89,8 +89,9 @@ then
 fi
 
 # Run tests
-for i in `seq $START $STOP`;
+for i in `seq 1 $ITERATION_COUNT`;
 do
+  echo "Iteration $i of $ITERATION_COUNT:"
   P="${OUT_DIR}/results$i"; #Filename prefix
   echo "Locks with decreasing priority"
   insert_module

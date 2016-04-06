@@ -18,8 +18,8 @@ L=$2; # Locks boolean
 R=$3; # Priority boolean
 N=$4; # Number of iterations
 
-MODDIR="/home/ubuntu/GM/Locks/Kernel_Locks/rt_module/GPU_Locks.ko"
-LIBDIR="/home/ubuntu/GM/Locks/Kernel_Locks/libcudart_wrapper.so"
+MODDIR="/home/ubuntu/GPUSync/Locks/Kernel_Locks/rt_module/GPU_Locks.ko"
+LIBDIR="/home/ubuntu/GPUSync/Locks/Kernel_Locks/libcudart_wrapper.so"
 LOGDIR="$(pwd)/"
 LOGFILE="log"
 LOG="2>>${LOGDIR}${LOGFILE}"
