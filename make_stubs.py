@@ -31,7 +31,7 @@ import pdb
 
 OUTPUT_FILE = "libcudart_wrapper.c";
 STUB_LOCATION = "./stubs/";
-SOURCE_HEADER = "/usr/local/cuda/include/cuda_runtime_api.h";
+SOURCE_HEADER = "/usr/local/cuda-9.0/targets/x86_64-linux/include/cuda_runtime_api.h";
 
 ###
 
@@ -45,7 +45,7 @@ finddvRE = re.compile("__dv\(.+?\)")
 # logging of all Cuda calls in a program.
 
 FUNC_BODY = """\t{func_ret} ret;
-\t// Write your own custom c code in the {func_name}.c file
+\t// Write your own code here
 \tret = orig_{func_name}({func_args});
 \treturn ret;
 """;

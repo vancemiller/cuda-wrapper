@@ -31,7 +31,7 @@ import pdb
 
 OUTPUT_FILE = "libcudart_wrapper.c"; # relative to python program
 STUB_LOCATION = "./stubs/"; # relative to python program
-SOURCE_HEADER = "/usr/local/cuda/include/cuda_runtime_api.h"; # absolute path
+SOURCE_HEADER = "/usr/local/cuda-9.0/targets/x86_64-linux/include/cuda_runtime_api.h"; # absolute path
 
 ### Compile regex
 
@@ -40,9 +40,6 @@ findPrototypeRE = re.compile("^extern\s+__host__.+?\(.*?\);$", flags=(re.DOTALL 
 finddvRE = re.compile("__dv\(.+?\)");
 
 # library header
-# Note that the include for GPU_Locks.h is necessary to provide
-# function prototypes for the GPU locking calls
-#
 LIB_HEADER = """
 #define _GNU_SOURCE
 
@@ -50,7 +47,6 @@ LIB_HEADER = """
 #include <dlfcn.h>
 #include <unistd.h>
 #include "cuda_runtime_api.h"
-#include "GPU_Locks.h"
 """;
 
 # Intercept function template
