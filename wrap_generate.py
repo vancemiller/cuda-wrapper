@@ -1,8 +1,8 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # Generates a complete library of wrapper functions for all the
 # CUDA functions defined in cuda_runtime_api.h. The library is a single
-# C file (libcudart_wrapper.c) which should be compiled to a shared
+# C file (libcudart_wrapper.cpp) which should be compiled to a shared
 # object (.so) to form a dynamically loaded library
 # libcudart_wrapper.so. (see Makefile)
 # This library is loaded at execution time for
@@ -24,30 +24,29 @@
 # University of North Carolina at Chapel Hill.
 # 2015.
 
-import re
 import pdb
+import re
+import sys
 
 ### Config vars
 
-OUTPUT_FILE = "libcudart_wrapper.c"; # relative to python program
-STUB_LOCATION = "./stubs/"; # relative to python program
-SOURCE_HEADER = "/usr/local/cuda-9.0/targets/x86_64-linux/include/cuda_runtime_api.h"; # absolute path
+OUTPUT_FILE = "libcudart_wrapper.cpp" # relative to python program
+STUB_LOCATION = "./stubs/" # relative to python program
+SOURCE_HEADER = "/usr/local/cuda/include/cuda_runtime_api.h" # absolute path
 
 ### Compile regex
 
-findFuncNameRE = re.compile("(\w+)\(");
-findPrototypeRE = re.compile("^extern\s+__host__.+?\(.*?\);$", flags=(re.DOTALL | re.MULTILINE));
-finddvRE = re.compile("__dv\(.+?\)");
+findFuncNameRE = re.compile("(\w+)\(")
+findPrototypeRE = re.compile("^extern\s+__host__.+?\(.*?\);$", flags=(re.DOTALL | re.MULTILINE))
+finddvRE = re.compile("__dv\(.+?\)")
 
 # library header
-LIB_HEADER = """
-#define _GNU_SOURCE
-
+LIB_HEADER = """\
 #include <stdio.h>
 #include <dlfcn.h>
 #include <unistd.h>
 #include "cuda_runtime_api.h"
-""";
+"""
 
 # Intercept function template
 FUNC_TEMPLATE = """
@@ -56,12 +55,11 @@ static {func_ptr} = NULL;
 {func_proto} {{
   {custom_code}
 }}
-""";
+"""
 
 # Library init function header
 
-INIT_HEADER = """__attribute__((constructor)) static void init() {
-	char *dl_error;""";
+INIT_HEADER = """__attribute__((constructor)) static void init() {"""
 
 # Init template for each function to intercept
 
@@ -69,109 +67,118 @@ INIT_TEMPLATE = """
   // clear dl error
   dlerror();
   if (orig_{func_name} == NULL) {{
-    orig_{func_name} = dlsym(RTLD_NEXT, "{func_name}");
+    orig_{func_name} = ({func_cast}) dlsym(RTLD_NEXT, "{func_name}");
   }}
-  if ((dl_error = dlerror()) != NULL)
+  if (orig_{func_name} == NULL)
   {{
-    fprintf(stderr, ">>>>>>> %s\\n", dl_error);
+    fprintf(stderr, ">>>>>>> %s\\n", dlerror());
   }}
 
-""";
+"""
 
 # End init function
 
-INIT_FOOTER = """}""";
+INIT_FOOTER = """}"""
 
 def generate():
   """
-  Generate the libcudart.c library
+  Generate the libcudart.cpp library
   """
   # open file
-  prototypes = findPrototypes(SOURCE_HEADER);
+  prototypes = findPrototypes(SOURCE_HEADER)
 
   # open file to write to
-  ofh = open(OUTPUT_FILE, "w");
+  ofh = open(OUTPUT_FILE, "w")
 
   # write header
-  ofh.write(LIB_HEADER);
-
-  # array of func names
-  func_names = [];
+  ofh.write(LIB_HEADER)
 
   for prototype in prototypes:
     # remove newlines
-    prototype = prototype.replace('\n', '');
-    func_proto, func_ptr, func_args, func_name, func_ret = parse_proto(prototype);
-
-    func_names.append(func_name);
+    prototype = prototype.replace('\n', '')
+    func_proto, func_ptr, func_cast, func_args, func_name, func_ret = parse_proto(prototype)
 
     # get custom content
-    custom_fd = open(STUB_LOCATION + func_name + ".c");
-    custom_code = custom_fd.read();
-    custom_fd.close();
+    custom_fd = open(STUB_LOCATION + func_name + ".cpp")
+    custom_code = custom_fd.read()
+    custom_fd.close()
 
     # write proto wrapper
     ofh.write(FUNC_TEMPLATE.format( \
         func_proto=func_proto, func_ptr=func_ptr, \
         func_args=func_args, custom_code=custom_code, func_name=func_name,
-        func_ret=func_ret));
+        func_ret=func_ret))
 
   # write init
-  ofh.write(INIT_HEADER);
-  for name in func_names:
-    ofh.write(INIT_TEMPLATE.format(func_name=name));
-  ofh.write(INIT_FOOTER);
-  ofh.close();
+  ofh.write(INIT_HEADER)
+  for prototype in prototypes:
+    # remove newlines
+    prototype = prototype.replace('\n', '')
+    func_proto, func_ptr, func_cast, func_args, func_name, func_ret = parse_proto(prototype)
+    ofh.write(INIT_TEMPLATE.format(func_name=func_name, func_cast=func_cast))
+  ofh.write(INIT_FOOTER)
+  ofh.close()
 
 def parse_proto(prototype):
   # remove __dv(0)
-  prototype = re.sub(finddvRE, "", prototype);
+  prototype = re.sub(finddvRE, "", prototype)
   # remove semicolon and extern
-  func_proto = func_format_prototype(prototype);
+  func_proto = func_format_prototype(prototype)
   # strip parameter types, keep names
-  func_args = func_format_args(prototype);
+  func_args = func_format_args(prototype)
   # strip everything but the name
-  func_name = func_format_name(prototype);
+  func_name = func_format_name(prototype)
   # strip return type and other tokens
-  func_ptr = func_format_ptr(func_proto, func_name);
+  func_ptr = func_format_ptr(func_proto, func_name)
+  # func ptr without name
+  func_cast = func_format_cast(func_ptr, func_name)
   # get just return type
-  func_ret = func_ret_type(func_proto);
+  func_ret = func_ret_type(func_proto)
 
-  return func_proto, func_ptr, func_args, func_name, func_ret;
+  return func_proto, func_ptr, func_cast, func_args, func_name, func_ret
 
 def findPrototypes(file_name):
-  fd = open(file_name, 'r');
-  contents = fd.read();
-  fd.close();
-  return re.findall(findPrototypeRE, contents);
+  fd = open(file_name, 'r')
+  contents = fd.read()
+  fd.close()
+  return re.findall(findPrototypeRE, contents)
 
 def func_format_prototype(prototype):
   # remove extern
   if (prototype[0:7] == 'extern '):
-    prototype = prototype[7:];
+    prototype = prototype[7:]
   # remove semicolon
   if (prototype[-1] == ';'):
-    prototype = prototype[0:-1];
-  return prototype;
+    prototype = prototype[0:-1]
+  return prototype
 
 def func_format_ptr(prototype, func_name):
-  return re.sub(findFuncNameRE, "(*orig_" + func_name + ")(", prototype, count=1);
+  return re.sub(findFuncNameRE, "(*orig_" + func_name + ")(", prototype, count=1)
+
+def func_format_cast(func_ptr, func_name):
+  return re.sub("orig_"+func_name, "", func_ptr)
 
 def func_format_args(prototype):
   args = [ param.strip().split(" ")[-1].replace("*","") \
       if param.strip().find(" ") != -1 else '' \
-      for param in re.findall("\(.*\)", prototype)[0][1:-1].split(',') ];
+      for param in re.findall("\(.*\)", prototype)[0][1:-1].split(',') ]
 
-  return re.sub("['\[\]]", "", str(args));
+  return re.sub("['\[\]]", "", str(args))
 
 def func_format_name(prototype):
-  return re.search(findFuncNameRE, prototype).group(1);
+  return re.search(findFuncNameRE, prototype).group(1)
 
 def func_ret_type(prototype):
-  ret = re.sub("__.*?__", "", prototype);
-  ret = re.sub("CUDARTAPI", "", ret);
-  return re.sub("[A-Za-z0-9\$]+\(.*?\)","",ret).strip();
+  ret = re.sub("__.*?__", "", prototype)
+  ret = re.sub("CUDARTAPI", "", ret)
+  return re.sub("[A-Za-z0-9\$]+\(.*?\)","",ret).strip()
 
 if __name__ == "__main__":
-  generate();
+  if (len(sys.argv) >= 2):
+    OUTPUT_FILE = sys.argv[1]
+  if (len(sys.argv) >= 3):
+    STUB_LOCATION = sys.argv[2]
+  if (len(sys.argv) >= 4):
+    SOURCE_HEADER = sys.argv[3]
+  generate()
 

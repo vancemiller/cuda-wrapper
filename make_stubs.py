@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # Generates stub C code fragments for each Cuda function defined in
 # the cuda_runtime_api.h file.  There is one such C fragment generated
@@ -16,7 +16,7 @@
 # wrap_generate.py program,  For example, the stub generated for the
 # Cuda cudaMemcpy() function is:
 #        cudaError_t ret;
-#        // Write your own custom c code in the cudaMemcpy.c file
+#        // Write your own custom c code in the cudaMemcpy.cpp file
 #        ret = orig_cudaMemcpy(dst, src, count, kind);
 #        return ret;
 #
@@ -24,14 +24,15 @@
 # University of North Carolina at Chapel Hill.
 # 2015.
 
-import re
+import pathlib
 import pdb
+import re
+import sys
 
 ### Config vars
 
-OUTPUT_FILE = "libcudart_wrapper.c";
 STUB_LOCATION = "./stubs/";
-SOURCE_HEADER = "/usr/local/cuda-9.0/targets/x86_64-linux/include/cuda_runtime_api.h";
+SOURCE_HEADER = "/usr/local/cuda/include/cuda_runtime_api.h";
 
 ###
 
@@ -60,10 +61,9 @@ def generate():
     prototype = prototype.replace('\n', '');
     func_name, func_args, func_ret = parse_proto(prototype);
 
-    stub = open(STUB_LOCATION + func_name + '.c', 'w');
-
-    stub.write(FUNC_BODY.format(func_name=func_name, func_ret=func_ret, func_args=func_args));
-    stub.close();
+    pathlib.Path(STUB_LOCATION).mkdir(parents=True, exist_ok=True)
+    with open(STUB_LOCATION + func_name + '.cpp', 'w') as stub:
+      stub.write(FUNC_BODY.format(func_name=func_name, func_ret=func_ret, func_args=func_args));
 
 def parse_proto(prototype):
   # remove __dv(0)
@@ -110,5 +110,9 @@ def func_ret_type(prototype):
   return re.sub("[A-Za-z0-9\$]+\(.*?\)", "", ret).strip();
 
 if __name__ == "__main__":
+  if (len(sys.argv) >= 2):
+    STUB_LOCATION = sys.argv[1]
+  if (len(sys.argv) >= 3):
+    SOURCE_HEADER = sys.argv[2]
   generate()
 

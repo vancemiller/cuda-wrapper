@@ -34,3 +34,4 @@ NVIDIA_CUDA-6.5_Samples/
 # Debug files
 *.dSYM/
 *results*
+build
