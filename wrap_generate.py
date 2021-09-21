@@ -24,154 +24,88 @@
 # University of North Carolina at Chapel Hill.
 # 2015.
 
-import pdb
-import re
+import CppHeaderParser
 import sys
 
-### Config vars
+# Config vars
 
-OUTPUT_FILE = "libcudart_wrapper.cpp" # relative to python program
-STUB_LOCATION = "./stubs/" # relative to python program
-SOURCE_HEADER = "/usr/local/cuda/include/cuda_runtime_api.h" # absolute path
-
-### Compile regex
-
-findFuncNameRE = re.compile("(\w+)\(")
-findPrototypeRE = re.compile("^extern\s+__host__.+?\(.*?\);$", flags=(re.DOTALL | re.MULTILINE))
-finddvRE = re.compile("__dv\(.+?\)")
+OUTPUT_FILE = "libcudart_wrapper.cpp"  # relative to python program
+STUB_LOCATION = "./stubs/"  # relative to python program
+SOURCE_HEADER = "/usr/local/cuda/include/cuda_runtime_api.h"  # absolute path
 
 # library header
-LIB_HEADER = """\
+LIB_HEADER = '''\
 #include <stdio.h>
 #include <dlfcn.h>
 #include <unistd.h>
 #include "cuda_runtime_api.h"
-"""
+
+'''
 
 # Intercept function template
-FUNC_TEMPLATE = """
-static {func_ptr} = NULL;
+FUNC_TEMPLATE = '''\
+static {ret} (*orig_{name})({parameters}) = NULL;
 
-{func_proto} {{
-  {custom_code}
-}}
-"""
+{stub}
+
+'''
 
 # Library init function header
-
-INIT_HEADER = """__attribute__((constructor)) static void init() {"""
+INIT_HEADER = '''\
+__attribute__((constructor)) static void init() {
+'''
 
 # Init template for each function to intercept
-
-INIT_TEMPLATE = """
+INIT_TEMPLATE = '''\
   // clear dl error
   dlerror();
-  if (orig_{func_name} == NULL) {{
-    orig_{func_name} = ({func_cast}) dlsym(RTLD_NEXT, "{func_name}");
+  if (orig_{name} == NULL) {{
+    typedef {ret} (*{name}_t)({parameters});
+    orig_{name} = reinterpret_cast<{name}_t>(dlsym(RTLD_NEXT, "{name}"));
   }}
-  if (orig_{func_name} == NULL)
+  if (orig_{name} == NULL)
   {{
     fprintf(stderr, ">>>>>>> %s\\n", dlerror());
   }}
 
-"""
+'''
 
 # End init function
+INIT_FOOTER = '''}'''
 
-INIT_FOOTER = """}"""
 
-def generate():
-  """
-  Generate the libcudart.cpp library
-  """
-  # open file
-  prototypes = findPrototypes(SOURCE_HEADER)
+def generate(output_file, stub_location, header_file):
+  '''
+    Generate the libcudart.cpp shim library
+  '''
+  header = CppHeaderParser.CppHeader(header_file)
 
   # open file to write to
-  ofh = open(OUTPUT_FILE, "w")
+  with open(OUTPUT_FILE, "w") as ofh:
+    # write header
+    ofh.write(LIB_HEADER)
 
-  # write header
-  ofh.write(LIB_HEADER)
+    index = 0
 
-  for prototype in prototypes:
-    # remove newlines
-    prototype = prototype.replace('\n', '')
-    func_proto, func_ptr, func_cast, func_args, func_name, func_ret = parse_proto(prototype)
+    # write proto wrappers
+    for function in header.functions:
+      name = function['name']
+      stub_file = '{}/{}_{}.cpp'.format(stub_location, index, name)
+      index += 1
+      parameters = ', '.join(x['type'] for x in function['parameters'])
+      with open(stub_file) as stub:
+        ofh.write(FUNC_TEMPLATE.format(name=name, ret=function['rtnType'], parameters=parameters, stub=stub.read()))
+    
+    # write dlsym initialization
+    ofh.write(INIT_HEADER)
+    index = 0
+    for function in header.functions:
+      parameters = ', '.join(x['type'] for x in function['parameters'])
+      ofh.write(INIT_TEMPLATE.format(
+            name=function['name'], ret=function['rtnType'], parameters=parameters))
+      index +=1
+    ofh.write(INIT_FOOTER)
 
-    # get custom content
-    custom_fd = open(STUB_LOCATION + func_name + ".cpp")
-    custom_code = custom_fd.read()
-    custom_fd.close()
-
-    # write proto wrapper
-    ofh.write(FUNC_TEMPLATE.format( \
-        func_proto=func_proto, func_ptr=func_ptr, \
-        func_args=func_args, custom_code=custom_code, func_name=func_name,
-        func_ret=func_ret))
-
-  # write init
-  ofh.write(INIT_HEADER)
-  for prototype in prototypes:
-    # remove newlines
-    prototype = prototype.replace('\n', '')
-    func_proto, func_ptr, func_cast, func_args, func_name, func_ret = parse_proto(prototype)
-    ofh.write(INIT_TEMPLATE.format(func_name=func_name, func_cast=func_cast))
-  ofh.write(INIT_FOOTER)
-  ofh.close()
-
-def parse_proto(prototype):
-  # remove __dv(0)
-  prototype = re.sub(finddvRE, "", prototype)
-  # remove semicolon and extern
-  func_proto = func_format_prototype(prototype)
-  # strip parameter types, keep names
-  func_args = func_format_args(prototype)
-  # strip everything but the name
-  func_name = func_format_name(prototype)
-  # strip return type and other tokens
-  func_ptr = func_format_ptr(func_proto, func_name)
-  # func ptr without name
-  func_cast = func_format_cast(func_ptr, func_name)
-  # get just return type
-  func_ret = func_ret_type(func_proto)
-
-  return func_proto, func_ptr, func_cast, func_args, func_name, func_ret
-
-def findPrototypes(file_name):
-  fd = open(file_name, 'r')
-  contents = fd.read()
-  fd.close()
-  return re.findall(findPrototypeRE, contents)
-
-def func_format_prototype(prototype):
-  # remove extern
-  if (prototype[0:7] == 'extern '):
-    prototype = prototype[7:]
-  # remove semicolon
-  if (prototype[-1] == ';'):
-    prototype = prototype[0:-1]
-  return prototype
-
-def func_format_ptr(prototype, func_name):
-  return re.sub(findFuncNameRE, "(*orig_" + func_name + ")(", prototype, count=1)
-
-def func_format_cast(func_ptr, func_name):
-  return re.sub("orig_"+func_name, "", func_ptr)
-
-def func_format_args(prototype):
-  args = [ param.strip().split(" ")[-1].replace("*","") \
-      if param.strip().find(" ") != -1 else '' \
-      for param in re.findall("\(.*\)", prototype)[0][1:-1].split(',') ]
-
-  return re.sub("['\[\]]", "", str(args))
-
-def func_format_name(prototype):
-  return re.search(findFuncNameRE, prototype).group(1)
-
-def func_ret_type(prototype):
-  ret = re.sub("__.*?__", "", prototype)
-  ret = re.sub("CUDARTAPI", "", ret)
-  return re.sub("[A-Za-z0-9\$]+\(.*?\)","",ret).strip()
 
 if __name__ == "__main__":
   if (len(sys.argv) >= 2):
@@ -180,5 +114,4 @@ if __name__ == "__main__":
     STUB_LOCATION = sys.argv[2]
   if (len(sys.argv) >= 4):
     SOURCE_HEADER = sys.argv[3]
-  generate()
-
+  generate(OUTPUT_FILE, STUB_LOCATION, SOURCE_HEADER)
